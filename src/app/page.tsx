@@ -5,6 +5,8 @@ import { brainbitManager } from "@/lib/brainbit";
 import { getGeminiModel } from "@/lib/gemini";
 import { SignalCheckModal } from "@/components/signal-check-modal";
 import { SignalGraph } from "@/components/signal-graph";
+import { BrainVisualizer } from "@/components/brain-visualizer";
+import { useNeuroSession } from "@/hooks/use-neuro-session";
 
 export default function Home() {
   const [deviceStatus, setDeviceStatus] = useState("Disconnected");
@@ -134,8 +136,10 @@ export default function Home() {
     }
   };
 
+  const session = useNeuroSession(brainwaves);
+
   return (
-    <main className="min-h-screen bg-black text-white p-8 font-sans selection:bg-purple-900 selection:text-white">
+    <main className="min-h-screen bg-black text-white p-8 font-sans selection:bg-purple-900 selection:text-white relative overflow-hidden">
       <SignalCheckModal
         isOpen={isSignalModalOpen}
         onClose={() => setIsSignalModalOpen(false)}
@@ -143,7 +147,32 @@ export default function Home() {
         resistances={resistances}
       />
 
-      <div className="max-w-4xl mx-auto space-y-12">
+      {/* Immersive Visualizer Background */}
+      <BrainVisualizer brainwaves={brainwaves} isActive={session.isActive} />
+
+      {/* Immersive Session Overlay */}
+      <div className={`fixed inset-0 z-50 flex flex-col items-center justify-center pointer-events-none transition-opacity duration-1000 ${session.isActive ? "opacity-100" : "opacity-0"}`}>
+        <div className="absolute top-8 right-8 pointer-events-auto">
+          <button onClick={() => session.stopSession()} className="text-white/50 hover:text-white px-4 py-2 border border-white/20 rounded-full text-xs uppercase tracking-widest backdrop-blur-md transition-all">
+            End Session
+          </button>
+        </div>
+
+        <div className="text-center space-y-6 max-w-2xl px-6">
+          <div className="space-y-2">
+            <div className="text-blue-400 text-xs font-mono uppercase tracking-[0.2em]">{session.phase}</div>
+            <div className="text-6xl font-thin text-white tracking-tight">
+              {Math.floor(session.timeLeft / 60)}:{(session.timeLeft % 60).toString().padStart(2, '0')}
+            </div>
+          </div>
+
+          <p className="text-xl text-white/80 font-light leading-relaxed animate-in fade-in slide-in-from-bottom-4 duration-1000">
+            "{session.guidance}"
+          </p>
+        </div>
+      </div>
+
+      <div className={`max-w-4xl mx-auto space-y-12 relative z-10 transition-opacity duration-1000 ${session.isActive ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
         {/* Header */}
         <header className="flex justify-between items-center border-b border-gray-800 pb-6">
           <div className="space-y-1">
@@ -186,6 +215,19 @@ export default function Home() {
           </div>
         </header>
 
+        {/* Primary Actions */}
+        {/* Primary Actions */}
+        <div className="flex justify-center animate-in fade-in zoom-in-95 duration-700 py-4">
+          <button
+            onClick={() => session.startSession()}
+            className="group relative px-10 py-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 rounded-2xl font-bold text-white shadow-2xl shadow-blue-500/20 hover:shadow-blue-500/40 transition-all hover:scale-[1.02] active:scale-95 flex items-center gap-4 overflow-hidden border border-white/10"
+          >
+            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-out" />
+            <span className="relative w-3 h-3 rounded-full bg-white animate-pulse" />
+            <span className="relative text-lg tracking-wide">Start Deep Flow Session</span>
+          </button>
+        </div>
+
         {/* Metrics Grid */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="grid grid-cols-4 gap-4">
@@ -225,13 +267,17 @@ export default function Home() {
         <section className="space-y-6 pt-12 border-t border-gray-800">
           <div className="flex justify-between items-center">
             <h2 className="text-2xl font-light text-gray-200">Gemini Insight</h2>
-            <button
-              onClick={handleAnalyze}
-              disabled={startAnalysis}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-3 rounded-xl text-sm font-semibold hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-purple-500/25"
-            >
-              {startAnalysis ? "Analyzing..." : "Analyze Pattern"}
-            </button>
+            <div className="flex gap-4">
+              <button
+                onClick={handleAnalyze}
+                disabled={startAnalysis}
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-3 rounded-xl text-sm font-semibold hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-purple-500/25"
+              >
+                {startAnalysis ? "Analyzing..." : "Analyze Current State"}
+              </button>
+
+
+            </div>
           </div>
 
           <div className="min-h-[160px] bg-gradient-to-br from-gray-900 to-black rounded-2xl p-8 border border-gray-800 relative overflow-hidden group">
