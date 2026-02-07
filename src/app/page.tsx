@@ -232,10 +232,10 @@ export default function Home() {
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: "Alpha (Relax)", value: brainwaves.alpha, color: "text-blue-400", border: "hover:border-blue-500/50" },
-              { label: "Beta (Focus)", value: brainwaves.beta, color: "text-purple-400", border: "hover:border-purple-500/50" },
-              { label: "Theta (Drowsy)", value: brainwaves.theta, color: "text-pink-400", border: "hover:border-pink-500/50" },
-              { label: "Gamma (Flow)", value: brainwaves.gamma, color: "text-orange-400", border: "hover:border-orange-500/50" }
+              { label: "Alpha (Relax)", value: brainwaves.alpha, color: "text-blue-400", bg: "bg-blue-400", border: "hover:border-blue-500/50" },
+              { label: "Beta (Focus)", value: brainwaves.beta, color: "text-purple-400", bg: "bg-purple-400", border: "hover:border-purple-500/50" },
+              { label: "Theta (Drowsy)", value: brainwaves.theta, color: "text-pink-400", bg: "bg-pink-400", border: "hover:border-pink-500/50" },
+              { label: "Gamma (Flow)", value: brainwaves.gamma, color: "text-orange-400", bg: "bg-orange-400", border: "hover:border-orange-500/50" }
             ].map((metric) => {
               const total = brainwaves.alpha + brainwaves.beta + brainwaves.theta + brainwaves.gamma || 1;
               const percent = Math.round((metric.value / total) * 100);
@@ -249,7 +249,7 @@ export default function Home() {
                   </div>
                   <div className="mt-2 flex items-center gap-2">
                     <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                      <div className={`h-full ${metric.color.replace('text-', 'bg-')} transition-all duration-500`} style={{ width: `${percent}%` }} />
+                      <div className={`h-full ${metric.bg} transition-all duration-500`} style={{ width: `${percent}%` }} />
                     </div>
                     <div className="text-xs text-gray-400 font-mono w-8 text-right">{percent}%</div>
                   </div>
