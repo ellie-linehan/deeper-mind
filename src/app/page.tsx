@@ -9,13 +9,22 @@ import { BrainVisualizer } from "@/components/brain-visualizer";
 import { useNeuroSession } from "@/hooks/use-neuro-session";
 
 export default function Home() {
+  const [brainwaves, setBrainwaves] = useState({ alpha: 0, beta: 0, theta: 0, gamma: 0 });
   const [deviceStatus, setDeviceStatus] = useState("Disconnected");
   const [aiResponse, setAiResponse] = useState("");
   const [isSignalModalOpen, setIsSignalModalOpen] = useState(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [sensor, setSensor] = useState<any>(null);
+
+  // --- Demo Mode State (Hoisted) ---
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const session = useNeuroSession(brainwaves, isDemoMode);
+
+  // Use session.activeBrainwaves for visualization if in session/demo, otherwise real brainwaves
+  const displayBrainwaves = (session.isActive || isDemoMode) ? session.activeBrainwaves : brainwaves;
+  // --------------------------------
+
   const [startAnalysis, setStartAnalysis] = useState(false);
-  const [brainwaves, setBrainwaves] = useState({ alpha: 0, beta: 0, theta: 0, gamma: 0 });
   const [resistances, setResistances] = useState({ O1: Infinity, O2: Infinity, T3: Infinity, T4: Infinity });
 
   const setupResistanceSubscription = () => {
@@ -103,7 +112,9 @@ export default function Home() {
 
     try {
       const model = getGeminiModel();
-      const totalPower = brainwaves.alpha + brainwaves.beta + brainwaves.theta + brainwaves.gamma || 1;
+      // Use displayBrainwaves (handles Demo Mode)
+      const bw = displayBrainwaves;
+      const totalPower = bw.alpha + bw.beta + bw.theta + bw.gamma || 1;
       const getPercent = (val: number) => Math.round((val / totalPower) * 100);
 
       // Construct a prompt with relative power metrics
@@ -113,10 +124,10 @@ export default function Home() {
         Perform a "Pre-Session Check" for a user about to enter a "Deep Flow" neurofeedback session.
         
         Real-time Relative Power (%):
-        - Gamma (Flow/Peak Performance): ${getPercent(brainwaves.gamma)}%
-        - Beta (Active Focus/Stress): ${getPercent(brainwaves.beta)}%
-        - Alpha (Relaxation): ${getPercent(brainwaves.alpha)}%
-        - Theta (Drowsiness/Autopilot): ${getPercent(brainwaves.theta)}%
+        - Gamma (Flow/Peak Performance): ${getPercent(bw.gamma)}%
+        - Beta (Active Focus/Stress): ${getPercent(bw.beta)}%
+        - Alpha (Relaxation): ${getPercent(bw.alpha)}%
+        - Theta (Drowsiness/Autopilot): ${getPercent(bw.theta)}%
         
         Task:
         1. State the user's *current* mental state in one short sentence (e.g., "You are currently in a relaxed, drifting state.").
@@ -139,10 +150,16 @@ export default function Home() {
     }
   };
 
-  const session = useNeuroSession(brainwaves);
-
   return (
     <main className="min-h-screen bg-black text-white p-8 font-sans selection:bg-purple-900 selection:text-white relative overflow-hidden">
+      {/* Demo Mode Badge */}
+      {isDemoMode && (
+        <div className="fixed top-0 left-1/2 -translate-x-1/2 bg-purple-600/90 text-white text-[10px] font-bold px-3 py-1 rounded-b-lg z-50 shadow-[0_0_20px_rgba(147,51,234,0.5)]">
+          DEMO DATA ACTIVE
+        </div>
+      )
+      }
+
       <SignalCheckModal
         isOpen={isSignalModalOpen}
         onClose={() => setIsSignalModalOpen(false)}
@@ -215,6 +232,15 @@ export default function Home() {
                 Connect Device
               </button>
             )}
+
+            <button
+              onClick={() => setIsDemoMode(!isDemoMode)}
+              className={`text-xs px-4 py-2 rounded-full font-mono uppercase tracking-wider border transition-all ${isDemoMode
+                ? "bg-purple-900/50 text-purple-300 border-purple-500/50"
+                : "bg-gray-900/50 text-gray-500 border-gray-800 hover:border-gray-600"}`}
+            >
+              {isDemoMode ? "Demo Active" : "Try Demo"}
+            </button>
           </div>
         </header>
 
@@ -235,19 +261,19 @@ export default function Home() {
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="grid grid-cols-4 gap-4">
             {[
-              { label: "Alpha (Relax)", value: brainwaves.alpha, color: "text-blue-400", bg: "bg-blue-400", border: "hover:border-blue-500/50" },
-              { label: "Beta (Focus)", value: brainwaves.beta, color: "text-purple-400", bg: "bg-purple-400", border: "hover:border-purple-500/50" },
-              { label: "Theta (Drowsy)", value: brainwaves.theta, color: "text-pink-400", bg: "bg-pink-400", border: "hover:border-pink-500/50" },
-              { label: "Gamma (Flow)", value: brainwaves.gamma, color: "text-orange-400", bg: "bg-orange-400", border: "hover:border-orange-500/50" }
+              { label: "Alpha (Relax)", value: displayBrainwaves.alpha, color: "text-blue-400", bg: "bg-blue-400", border: "hover:border-blue-500/50" },
+              { label: "Beta (Focus)", value: displayBrainwaves.beta, color: "text-purple-400", bg: "bg-purple-400", border: "hover:border-purple-500/50" },
+              { label: "Theta (Drowsy)", value: displayBrainwaves.theta, color: "text-pink-400", bg: "bg-pink-400", border: "hover:border-pink-500/50" },
+              { label: "Gamma (Flow)", value: displayBrainwaves.gamma, color: "text-orange-400", bg: "bg-orange-400", border: "hover:border-orange-500/50" }
             ].map((metric) => {
-              const total = brainwaves.alpha + brainwaves.beta + brainwaves.theta + brainwaves.gamma || 1;
+              const total = displayBrainwaves.alpha + displayBrainwaves.beta + displayBrainwaves.theta + displayBrainwaves.gamma || 1;
               const percent = Math.round((metric.value / total) * 100);
 
               return (
                 <div key={metric.label} className={`bg-gray-900/50 p-6 rounded-2xl border border-gray-800 transition-colors ${metric.border}`}>
                   <div className={`text-xs ${metric.color} uppercase tracking-widest font-semibold mb-2`}>{metric.label}</div>
                   <div className="flex items-baseline gap-2">
-                    <div className="text-2xl font-mono text-gray-200">{metric.value}</div>
+                    <div className="text-2xl font-mono text-gray-200">{metric.value.toFixed(1)}</div>
                     <div className="text-sm text-gray-500 font-mono">µV</div>
                   </div>
                   <div className="mt-2 flex items-center gap-2">
@@ -263,7 +289,7 @@ export default function Home() {
         </section>
 
         <section className="animate-in fade-in slide-in-from-bottom-5 duration-1000">
-          <SignalGraph />
+          <SignalGraph isDemoMode={isDemoMode} />
         </section>
 
         {/* AI Analysis */}
@@ -297,6 +323,6 @@ export default function Home() {
           </div>
         </section>
       </div>
-    </main>
+    </main >
   );
 }

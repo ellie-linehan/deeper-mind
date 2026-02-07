@@ -9,7 +9,9 @@ export class NeuroAudioEngine {
     private alphaPad: OscillatorNode | null = null;
     private alphaGain: GainNode | null = null;
 
-    private gammaShimmer: OscillatorNode | null = null;
+    // Gamma Binaural Layers (Left/Right)
+    private gammaLeft: OscillatorNode | null = null;
+    private gammaRight: OscillatorNode | null = null;
     private gammaGain: GainNode | null = null;
 
     private isRunning = false;
@@ -25,10 +27,10 @@ export class NeuroAudioEngine {
 
         // Master Gain
         this.masterGain = this.ctx!.createGain();
-        this.masterGain.gain.value = 0.5; // Master volume
+        this.masterGain.gain.value = 0.4; // Slightly lower master volume
         this.masterGain.connect(this.ctx!.destination);
 
-        // 1. Theta Drone (Deep Low 55Hz - A1)
+        // 1. Theta Drone (Deep Low 55Hz)
         this.thetaDrone = this.ctx!.createOscillator();
         this.thetaDrone.type = 'sine';
         this.thetaDrone.frequency.value = 55;
@@ -38,41 +40,50 @@ export class NeuroAudioEngine {
         this.thetaGain.connect(this.masterGain);
         this.thetaDrone.start();
 
-        // 2. Alpha Pad (Warm 110Hz - A2 + minor detune)
+        // 2. Alpha Pad (Warm 110Hz)
         this.alphaPad = this.ctx!.createOscillator();
-        this.alphaPad.type = 'triangle'; // Richer tone
+        this.alphaPad.type = 'triangle';
         this.alphaPad.frequency.value = 110;
         this.alphaGain = this.ctx!.createGain();
         this.alphaGain.gain.value = 0;
-        // Simple filter to soften the triangle wave
+
+        // Soften the pad
         const alphaFilter = this.ctx!.createBiquadFilter();
         alphaFilter.type = 'lowpass';
-        alphaFilter.frequency.value = 400;
+        alphaFilter.frequency.value = 300; // Softer filter
 
         this.alphaPad.connect(alphaFilter);
         alphaFilter.connect(this.alphaGain);
         this.alphaGain.connect(this.masterGain);
         this.alphaPad.start();
 
-        // 3. Gamma Shimmer (High 440Hz - A4)
-        this.gammaShimmer = this.ctx!.createOscillator();
-        this.gammaShimmer.type = 'sine';
-        this.gammaShimmer.frequency.value = 440;
+        // 3. Gamma Binaural Beats (40Hz Difference for Gamma Induction)
+        // Base Tone: 200Hz (Left)
+        // Offset Tone: 240Hz (Right) -> Result: 40Hz beat
+
         this.gammaGain = this.ctx!.createGain();
         this.gammaGain.gain.value = 0;
-
-        // Tremolo effect for "shimmer"
-        const tremolo = this.ctx!.createOscillator();
-        tremolo.frequency.value = 8; // 8Hz shimmer
-        const tremoloGain = this.ctx!.createGain();
-        tremoloGain.gain.value = 200; // Depth
-        tremolo.connect(tremoloGain);
-        // Note: To properly modulate gain, we'd need a more complex graph, 
-        // but for now let's just use it as a pure tone layer.
-
-        this.gammaShimmer.connect(this.gammaGain);
         this.gammaGain.connect(this.masterGain);
-        this.gammaShimmer.start();
+
+        // Left Channel
+        this.gammaLeft = this.ctx!.createOscillator();
+        this.gammaLeft.type = 'sine';
+        this.gammaLeft.frequency.value = 200;
+        const leftPanner = this.ctx!.createStereoPanner();
+        leftPanner.pan.value = -1; // Full Left
+        this.gammaLeft.connect(leftPanner);
+        leftPanner.connect(this.gammaGain);
+        this.gammaLeft.start();
+
+        // Right Channel
+        this.gammaRight = this.ctx!.createOscillator();
+        this.gammaRight.type = 'sine';
+        this.gammaRight.frequency.value = 240; // +40Hz
+        const rightPanner = this.ctx!.createStereoPanner();
+        rightPanner.pan.value = 1; // Full Right
+        this.gammaRight.connect(rightPanner);
+        rightPanner.connect(this.gammaGain);
+        this.gammaRight.start();
 
         this.isRunning = true;
     }
@@ -87,21 +98,18 @@ export class NeuroAudioEngine {
         const a = brainwaves.alpha / total;
         const g = brainwaves.gamma / total;
 
-        // Smooth transitions (exponential ramp is better but simple lerp works for update loop)
         const now = this.ctx.currentTime;
-        const rampTime = 0.5; // 500ms smooth
+        const rampTime = 0.5;
 
-        // Theta: Always present as base, boosts when drowsy
-        // Base 0.1, max 0.4
-        this.thetaGain?.gain.linearRampToValueAtTime(0.1 + (t * 0.3), now + rampTime);
+        // Theta: Base presence
+        this.thetaGain?.gain.linearRampToValueAtTime(0.1 + (t * 0.2), now + rampTime);
 
-        // Alpha: Swells when relaxing
-        // Base 0.0, max 0.3
-        this.alphaGain?.gain.linearRampToValueAtTime(a * 0.4, now + rampTime);
+        // Alpha: Swells with relaxation
+        this.alphaGain?.gain.linearRampToValueAtTime(a * 0.3, now + rampTime);
 
-        // Gamma: Shimmers when flowing
-        // Base 0.0, max 0.2 (high freq is perceived louder)
-        this.gammaGain?.gain.linearRampToValueAtTime(g * 0.3, now + rampTime);
+        // Gamma: Binaural beats fade in during Flow
+        // 40Hz beats are subtle but powerful
+        this.gammaGain?.gain.linearRampToValueAtTime(g * 0.25, now + rampTime);
     }
 
     stop() {

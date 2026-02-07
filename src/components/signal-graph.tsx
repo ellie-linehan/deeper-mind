@@ -23,7 +23,7 @@ class HighPassFilter {
     }
 }
 
-export function SignalGraph() {
+export function SignalGraph({ isDemoMode = false }: { isDemoMode?: boolean }) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const dataRef = useRef<{ T3: number; T4: number; O1: number; O2: number }[]>([]);
 
@@ -45,24 +45,52 @@ export function SignalGraph() {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        // Reset data on mount
+        // Reset data on mount/mode toggle
         dataRef.current = [];
 
-        // Subscribe to raw data
-        brainbitManager.subscribeRaw((sample) => {
-            // Apply filtering immediately before storage
-            const filteredSample = {
-                T3: filters.current.T3.process(sample.T3),
-                T4: filters.current.T4.process(sample.T4),
-                O1: filters.current.O1.process(sample.O1),
-                O2: filters.current.O2.process(sample.O2)
-            };
+        let demoInterval: NodeJS.Timeout;
 
-            dataRef.current.push(filteredSample);
-            if (dataRef.current.length > BUFFER_SIZE) {
-                dataRef.current.shift();
-            }
-        });
+        // 1. Subscribe to REAL raw data if NOT demo
+        if (!isDemoMode) {
+            brainbitManager.subscribeRaw((sample) => {
+                const filteredSample = {
+                    T3: filters.current.T3.process(sample.T3),
+                    T4: filters.current.T4.process(sample.T4),
+                    O1: filters.current.O1.process(sample.O1),
+                    O2: filters.current.O2.process(sample.O2)
+                };
+                dataRef.current.push(filteredSample);
+                if (dataRef.current.length > BUFFER_SIZE) dataRef.current.shift();
+            });
+        }
+        // 2. Generate SIMULATED raw data if DEMO
+        else {
+            let t = 0;
+            demoInterval = setInterval(() => {
+                // Generate ~25 points per 100ms interval to mimic ~250Hz stream roughly
+                // Actually, let's just push batches to be efficient
+                for (let i = 0; i < 5; i++) {
+                    t += 0.004; // 1/250s
+
+                    // Synthetic EEG: Mix of frequencies + noise
+                    const signal = (freq: number, phase: number) => Math.sin(t * Math.PI * 2 * freq + phase);
+                    // Boosted noise to match realistic sensor floor (~20-30uV)
+                    const noise = () => (Math.random() - 0.5) * 50;
+
+                    // Create slightly different signals per channel
+                    // Multipliers increased 5x to match the 0.05 px/uV sensitivity (needs ~500uV for full swing)
+                    const sample = {
+                        T3: (signal(10, 0) * 100) + (signal(2, 0) * 200) + noise(), // Alpha heavy
+                        T4: (signal(15, 1) * 80) + (signal(3, 1) * 150) + noise(), // Beta mix
+                        O1: (signal(10, 2) * 120) + (signal(1, 2) * 250) + noise(), // Strong Alpha/Delta
+                        O2: (signal(10, 3) * 120) + (signal(1, 3) * 250) + noise()
+                    };
+
+                    dataRef.current.push(sample);
+                    if (dataRef.current.length > BUFFER_SIZE) dataRef.current.shift();
+                }
+            }, 20); // 50Hz update loop generating 250Hz data
+        }
 
         let animationFrameId: number;
 
@@ -151,8 +179,9 @@ export function SignalGraph() {
 
         return () => {
             cancelAnimationFrame(animationFrameId);
+            if (demoInterval) clearInterval(demoInterval);
         };
-    }, []);
+    }, [isDemoMode]); // Re-run effect when mode changes
 
     return (
         <div className="w-full bg-gray-900/50 rounded-2xl border border-gray-800 p-6 backdrop-blur-sm">

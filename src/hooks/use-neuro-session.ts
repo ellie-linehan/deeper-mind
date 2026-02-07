@@ -11,20 +11,42 @@ const STAGES = [
     { name: "Gamma Flow", duration: 120, target: "Focus, visualize gold/white light" } // 5-7 min (2 min)
 ];
 
-export function useNeuroSession(brainwaves: { alpha: number, beta: number, theta: number, gamma: number }) {
+import { generateSimulatedBrainwaves } from "@/lib/data-simulator";
+
+export function useNeuroSession(realBrainwaves: { alpha: number, beta: number, theta: number, gamma: number }, isDemoMode = false) {
     const [isActive, setIsActive] = useState(false);
     const [timeLeft, setTimeLeft] = useState(420); // 7 mins
     const [currentStageIndex, setCurrentStageIndex] = useState(0);
     const [guidance, setGuidance] = useState("Welcome to Deeper Mind. Close your eyes and breathe.");
 
-    const chatSession = useRef<any>(null);
+    const [simulatedBrainwaves, setSimulatedBrainwaves] = useState(realBrainwaves);
+
+    // Determines which data source to use
+    const activeBrainwaves = isDemoMode ? simulatedBrainwaves : realBrainwaves;
+    const brainwavesRef = useRef(activeBrainwaves);
+
+    // Simulation Loop (Runs if Demo Mode is ON, even if session is not active)
+    useEffect(() => {
+        if (!isDemoMode) return;
+
+        const simInterval = setInterval(() => {
+            // If session is active, use current stage. If not, simulate "Calibration" (Idle)
+            const stageName = isActive ? STAGES[currentStageIndex].name : "Calibration";
+
+            const nextData = generateSimulatedBrainwaves(timeLeft, stageName as any);
+            setSimulatedBrainwaves(nextData);
+            brainwavesRef.current = nextData;
+        }, 100); // 10Hz Sim update
+
+        return () => clearInterval(simInterval);
+    }, [isActive, isDemoMode, timeLeft, currentStageIndex]);
 
     // Audio Engine Update
     useEffect(() => {
         if (isActive) {
-            neuroAudio.update(brainwaves);
+            neuroAudio.update(activeBrainwaves);
         }
-    }, [brainwaves, isActive]);
+    }, [activeBrainwaves, isActive]);
 
     // Timer & Stage Logic
     useEffect(() => {
@@ -58,8 +80,12 @@ export function useNeuroSession(brainwaves: { alpha: number, beta: number, theta
     }, [timeLeft]);
 
     // --- Refactor for Stability ---
-    const brainwavesRef = useRef(brainwaves);
-    useEffect(() => { brainwavesRef.current = brainwaves; }, [brainwaves]);
+    // Ensure brainwavesRef always points to the ACTIVE data source (Real or Simulated)
+    useEffect(() => {
+        brainwavesRef.current = activeBrainwaves;
+    }, [activeBrainwaves]);
+
+    const chatSession = useRef<any>(null);
 
     // Initialize Chat & Run Guidance Loop
     useEffect(() => {
@@ -76,20 +102,21 @@ export function useNeuroSession(brainwaves: { alpha: number, beta: number, theta
                             text: `
                     System: You are the "Deeper Mind" neurofeedback guide.
                     Protocol: 7 Minutes.
-                    - Phase 1 (0-2m): Calibration (Reduce Beta).
-                    - Phase 2 (2-5m): Alpha Induction (Relaxation).
-                    - Phase 3 (5-7m): Gamma Flow (Peak Focus).
+                    - Phase 1 (0-2m): Calibration (Reduce Tension).
+                    - Phase 2 (2-5m): Deep Relaxation (Open Monitoring).
+                    - Phase 3 (5-7m): Flow State (Peak Focus).
                     
                     CRITICAL INSTRUCTION:
-                    - Use your LONG CONTEXT to track trends.
-                    - Compare current metrics to previous messages in this session.
-                    - Example: "Your Alpha is rising nicely compared to a minute ago."
-                    - Output: ONE short, spoken sentence.
+                    - NEVER use technical terms like "Alpha", "Beta", "Theta", "Gamma".
+                    - INSTEAD use: "Relaxation", "Tension", "Drowsiness", "Flow/Focus".
+                    - NEVER use percentages or numbers.
+                    - Use qualitative trends: "Your flow is deepening", "Tension is rising", "You are drifting".
+                    - Output: ONE short, soothing, spoken sentence (under 15 words).
                 ` }]
                     },
                     {
                         role: "model",
-                        parts: [{ text: "Understood. I will track trends and guide based on history." }]
+                        parts: [{ text: "Understood. I will use simple, qualitative terms and a soothing tone." }]
                     }
                 ]
             });
@@ -106,10 +133,10 @@ export function useNeuroSession(brainwaves: { alpha: number, beta: number, theta
             const msg = `
               Session Time: ${420 - timeLeft}s.
               Phase: ${stage.name}.
-              Alpha: ${Math.round(bw.alpha / total * 100)}%
-              Beta: ${Math.round(bw.beta / total * 100)}%
-              Theta: ${Math.round(bw.theta / total * 100)}%
-              Gamma: ${Math.round(bw.gamma / total * 100)}%
+              Relaxation (Alpha): ${Math.round(bw.alpha / total * 100)}%
+              Tension (Beta): ${Math.round(bw.beta / total * 100)}%
+              Drowsiness (Theta): ${Math.round(bw.theta / total * 100)}%
+              Flow (Gamma): ${Math.round(bw.gamma / total * 100)}%
               
               Guidance?
             `;
@@ -146,8 +173,8 @@ export function useNeuroSession(brainwaves: { alpha: number, beta: number, theta
             window.speechSynthesis.cancel();
 
             const utterance = new SpeechSynthesisUtterance(text);
-            utterance.rate = 0.9;
-            utterance.pitch = 1.0;
+            utterance.rate = 0.85; // Slower
+            utterance.pitch = 0.9; // Deeper
 
             // Try to find a better voice
             const voices = window.speechSynthesis.getVoices();
@@ -177,6 +204,7 @@ export function useNeuroSession(brainwaves: { alpha: number, beta: number, theta
         phase: STAGES[currentStageIndex].name,
         guidance,
         startSession,
-        stopSession
+        stopSession,
+        activeBrainwaves
     };
 }
