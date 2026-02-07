@@ -103,8 +103,10 @@ export default function Home() {
   };
 
   const handleAnalyze = async () => {
-    if (!sensor && deviceStatus !== "Connected") {
-      // Optional: Error or mock mode
+    // Allow analysis if connected OR if in Demo Mode
+    if (!isDemoMode && (!sensor && deviceStatus !== "Connected")) {
+      setAiResponse("Please connect a device or enable Demo Mode.");
+      return;
     }
 
     setStartAnalysis(true);
