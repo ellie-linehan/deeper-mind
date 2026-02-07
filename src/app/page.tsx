@@ -107,22 +107,25 @@ export default function Home() {
       const getPercent = (val: number) => Math.round((val / totalPower) * 100);
 
       // Construct a prompt with relative power metrics
+      // Construct a prompt with relative power metrics
       const prompt = `
         You are a neurofeedback expert. 
-        Analyze the following real-time brainwave data (Relative Power %):
+        Perform a "Pre-Session Check" for a user about to enter a "Deep Flow" neurofeedback session.
+        
+        Real-time Relative Power (%):
         - Gamma (Flow/Peak Performance): ${getPercent(brainwaves.gamma)}%
         - Beta (Active Focus/Stress): ${getPercent(brainwaves.beta)}%
         - Alpha (Relaxation): ${getPercent(brainwaves.alpha)}%
         - Theta (Drowsiness/Autopilot): ${getPercent(brainwaves.theta)}%
         
-        Raw Amplitudes (uV):
-        Gamma: ${brainwaves.gamma} | Beta: ${brainwaves.beta} | Alpha: ${brainwaves.alpha} | Theta: ${brainwaves.theta}
-
-        Provide a concise (2-3 sentence) insight.
-        - IGNORE "Focus Score" (it is deprecated).
-        - If Gamma is dominant (>25%), praise the "Flow State".
-        - If Theta/Alpha is dominant, suggest waking up or engaging in a challenge.
-        - If Beta is very high (>40%), warn about potential stress.
+        Task:
+        1. State the user's *current* mental state in one short sentence (e.g., "You are currently in a relaxed, drifting state.").
+        2. Provide *one* actionable tip to prepare for Deep Flow based on this state.
+           - If Theta/Alpha is >50%: "Try taking a few sharp, quick breaths to wake up your cortex."
+           - If Beta is >40%: "Take 3 deep, slow breaths to clear mental clutter."
+           - If Gamma is >25%: "You are already primed for flow. Dive in immediately."
+        
+        Keep it encouraging and under 30 words total.
       `;
 
       const result = await model.generateContent(prompt);
@@ -266,7 +269,7 @@ export default function Home() {
         {/* AI Analysis */}
         <section className="space-y-6 pt-12 border-t border-gray-800">
           <div className="flex justify-between items-center">
-            <h2 className="text-2xl font-light text-gray-200">Gemini Insight</h2>
+            <h2 className="text-2xl font-light text-gray-200">Pre-Session Calibration</h2>
             <div className="flex gap-4">
               <button
                 onClick={handleAnalyze}
