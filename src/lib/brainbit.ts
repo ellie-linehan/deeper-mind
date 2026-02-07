@@ -5,13 +5,23 @@ import { SignalProcessor, Brainwaves } from "./signal-processor";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type SignalCallback = (data: Brainwaves) => void;
 
+export type ChannelData = {
+    T3: number;
+    T4: number;
+    O1: number;
+    O2: number;
+};
+
 export class BrainbitManager {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private client: any | null = null;
     private signalProcessor: SignalProcessor;
     private onSignalCallback: SignalCallback | null = null;
+    private onRawDataCallback: ((data: ChannelData) => void) | null = null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private eegSubscription: any = null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private resistanceSubscription: any = null;
 
     constructor() {
         this.signalProcessor = new SignalProcessor();
@@ -50,9 +60,14 @@ export class BrainbitManager {
                 // Convert Volts to MicroVolts (uV) to avoid values near zero
                 const scaledSample = avgSample * 1000000;
 
-                // Emit raw data for visualization
+                // Emit raw data for visualization (all channels)
                 if (this.onRawDataCallback) {
-                    this.onRawDataCallback(scaledSample);
+                    this.onRawDataCallback({
+                        T3: data.val0_ch1 * 1000000,
+                        T4: data.val0_ch2 * 1000000,
+                        O1: data.val0_ch3 * 1000000,
+                        O2: data.val0_ch4 * 1000000
+                    });
                 }
 
                 const result = this.signalProcessor.processSample(scaledSample);
@@ -70,8 +85,6 @@ export class BrainbitManager {
             await this.client.stopEEGStream();
         }
     }
-
-    private resistanceSubscription: any = null;
 
     async startResistance() {
         if (this.client) {
@@ -117,9 +130,7 @@ export class BrainbitManager {
         this.onSignalCallback = callback;
     }
 
-    private onRawDataCallback: ((data: number) => void) | null = null;
-
-    subscribeRaw(callback: (data: number) => void) {
+    subscribeRaw(callback: (data: ChannelData) => void) {
         this.onRawDataCallback = callback;
     }
 

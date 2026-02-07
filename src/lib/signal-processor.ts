@@ -12,7 +12,6 @@ export interface Brainwaves {
     beta: number;
     theta: number;
     gamma: number;
-    focusScore: number;
 }
 
 export class SignalProcessor {
@@ -100,13 +99,7 @@ export class SignalProcessor {
         const theta = this.getBandPower(magnitudes, THETA_BAND);
         const gamma = this.getBandPower(magnitudes, GAMMA_BAND);
 
-        // Simple Focus Score: Beta / (Alpha + Theta)
-        // Ratio often used as "Beta/Theta" or "Beta/Alpha" index
-        // Prevent division by zero
-        const denominator = (alpha + theta) || 1;
-        const focusScore = Math.min(100, Math.max(0, (beta / denominator) * 10)); // Scaling factor
-
-        return { alpha, beta, theta, gamma, focusScore };
+        return { alpha, beta, theta, gamma };
     }
 
     private getBandPower(magnitudes: number[], band: number[]): number {

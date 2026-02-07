@@ -13,9 +13,19 @@ export default function Home() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [sensor, setSensor] = useState<any>(null);
   const [startAnalysis, setStartAnalysis] = useState(false);
-  const [focusScore, setFocusScore] = useState(0);
   const [brainwaves, setBrainwaves] = useState({ alpha: 0, beta: 0, theta: 0, gamma: 0 });
   const [resistances, setResistances] = useState({ O1: Infinity, O2: Infinity, T3: Infinity, T4: Infinity });
+
+  const setupResistanceSubscription = () => {
+    brainbitManager.subscribeToResistance((data) => {
+      setResistances({
+        T3: data.resistanceCh1 ?? Infinity,
+        T4: data.resistanceCh2 ?? Infinity,
+        O1: data.resistanceCh3 ?? Infinity,
+        O2: data.resistanceCh4 ?? Infinity
+      });
+    });
+  };
 
   const handleConnect = async () => {
     try {
@@ -30,7 +40,6 @@ export default function Home() {
 
       // Subscribe to signal updates for later
       brainbitManager.subscribe((data) => {
-        setFocusScore(Math.round(data.focusScore));
         setBrainwaves({
           alpha: parseFloat(data.alpha.toFixed(2)),
           beta: parseFloat(data.beta.toFixed(2)),
@@ -43,16 +52,7 @@ export default function Home() {
 
       // Start and subscribe to resistance data
       await brainbitManager.startResistance();
-      brainbitManager.subscribeToResistance((data) => {
-        // Brainbit README says: resistanceCh1, resistanceCh2, resistanceCh3, resistanceCh4
-        // Standard mapping: Ch1=T3, Ch2=T4, Ch3=O1, Ch4=O2
-        setResistances({
-          T3: data.resistanceCh1 ?? Infinity,
-          T4: data.resistanceCh2 ?? Infinity,
-          O1: data.resistanceCh3 ?? Infinity,
-          O2: data.resistanceCh4 ?? Infinity
-        });
-      });
+      setupResistanceSubscription();
 
     } catch (error) {
       console.error(error);
@@ -72,13 +72,12 @@ export default function Home() {
     }
   };
 
-
-
   const handleSignalCheck = async () => {
     try {
       await brainbitManager.stopEEG();
       await new Promise(r => setTimeout(r, 1500));
       await brainbitManager.startResistance();
+      setupResistanceSubscription(); // <--- Re-subscribe here!
       setIsSignalModalOpen(true);
     } catch (e) {
       console.error("Error switching to signal check:", e);
@@ -102,20 +101,26 @@ export default function Home() {
 
     try {
       const model = getGeminiModel();
-      // Construct a prompt with the user's CURRENT mental state metrics
+      const totalPower = brainwaves.alpha + brainwaves.beta + brainwaves.theta + brainwaves.gamma || 1;
+      const getPercent = (val: number) => Math.round((val / totalPower) * 100);
+
+      // Construct a prompt with relative power metrics
       const prompt = `
         You are a neurofeedback expert. 
-        Analyze the following real-time brainwave data:
-        - Focus Score: ${focusScore}/100
-        - Alpha (Relaxation): ${brainwaves.alpha}
-        - Beta (Active Thought): ${brainwaves.beta}
-        - Theta (Drowsiness): ${brainwaves.theta}
-        - Gamma (Flow State): ${brainwaves.gamma}
+        Analyze the following real-time brainwave data (Relative Power %):
+        - Gamma (Flow/Peak Performance): ${getPercent(brainwaves.gamma)}%
+        - Beta (Active Focus/Stress): ${getPercent(brainwaves.beta)}%
+        - Alpha (Relaxation): ${getPercent(brainwaves.alpha)}%
+        - Theta (Drowsiness/Autopilot): ${getPercent(brainwaves.theta)}%
         
-        Provide a concise (2-3 sentence) insight into the user's current mental state. 
-        If Gamma is high, mention Flow State.
-        If Focus is low (<40), suggest a quick breathing exercise.
-        If Focus is high (>70), suggest how to maintain this flow state.
+        Raw Amplitudes (uV):
+        Gamma: ${brainwaves.gamma} | Beta: ${brainwaves.beta} | Alpha: ${brainwaves.alpha} | Theta: ${brainwaves.theta}
+
+        Provide a concise (2-3 sentence) insight.
+        - IGNORE "Focus Score" (it is deprecated).
+        - If Gamma is dominant (>25%), praise the "Flow State".
+        - If Theta/Alpha is dominant, suggest waking up or engaging in a challenge.
+        - If Beta is very high (>40%), warn about potential stress.
       `;
 
       const result = await model.generateContent(prompt);
@@ -181,37 +186,34 @@ export default function Home() {
           </div>
         </header>
 
-        {/* Focus Meter */}
-        <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-          <div className="flex justify-between items-end">
-            <h2 className="text-2xl font-light text-gray-200">Live Focus Score</h2>
-            <span className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-500">{focusScore}</span>
-          </div>
-
-          <div className="relative h-6 bg-gray-900 rounded-full overflow-hidden border border-gray-800">
-            <div
-              className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 transition-all duration-500 ease-out"
-              style={{ width: `${focusScore}%` }}
-            />
-          </div>
-
+        {/* Metrics Grid */}
+        <section className="animate-in fade-in slide-in-from-bottom-4 duration-700">
           <div className="grid grid-cols-4 gap-4">
-            <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 hover:border-blue-500/50 transition-colors">
-              <div className="text-xs text-blue-400 uppercase tracking-widest font-semibold mb-2">Alpha (Relax)</div>
-              <div className="text-2xl font-mono text-gray-200">{brainwaves.alpha}</div>
-            </div>
-            <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 hover:border-purple-500/50 transition-colors">
-              <div className="text-xs text-purple-400 uppercase tracking-widest font-semibold mb-2">Beta (Focus)</div>
-              <div className="text-2xl font-mono text-gray-200">{brainwaves.beta}</div>
-            </div>
-            <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 hover:border-pink-500/50 transition-colors">
-              <div className="text-xs text-pink-400 uppercase tracking-widest font-semibold mb-2">Theta (Drowsy)</div>
-              <div className="text-2xl font-mono text-gray-200">{brainwaves.theta}</div>
-            </div>
-            <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 hover:border-orange-500/50 transition-colors">
-              <div className="text-xs text-orange-400 uppercase tracking-widest font-semibold mb-2">Gamma (Flow)</div>
-              <div className="text-2xl font-mono text-gray-200">{brainwaves.gamma}</div>
-            </div>
+            {[
+              { label: "Alpha (Relax)", value: brainwaves.alpha, color: "text-blue-400", border: "hover:border-blue-500/50" },
+              { label: "Beta (Focus)", value: brainwaves.beta, color: "text-purple-400", border: "hover:border-purple-500/50" },
+              { label: "Theta (Drowsy)", value: brainwaves.theta, color: "text-pink-400", border: "hover:border-pink-500/50" },
+              { label: "Gamma (Flow)", value: brainwaves.gamma, color: "text-orange-400", border: "hover:border-orange-500/50" }
+            ].map((metric) => {
+              const total = brainwaves.alpha + brainwaves.beta + brainwaves.theta + brainwaves.gamma || 1;
+              const percent = Math.round((metric.value / total) * 100);
+
+              return (
+                <div key={metric.label} className={`bg-gray-900/50 p-6 rounded-2xl border border-gray-800 transition-colors ${metric.border}`}>
+                  <div className={`text-xs ${metric.color} uppercase tracking-widest font-semibold mb-2`}>{metric.label}</div>
+                  <div className="flex items-baseline gap-2">
+                    <div className="text-2xl font-mono text-gray-200">{metric.value}</div>
+                    <div className="text-sm text-gray-500 font-mono">µV</div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                      <div className={`h-full ${metric.color.replace('text-', 'bg-')} transition-all duration-500`} style={{ width: `${percent}%` }} />
+                    </div>
+                    <div className="text-xs text-gray-400 font-mono w-8 text-right">{percent}%</div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
 

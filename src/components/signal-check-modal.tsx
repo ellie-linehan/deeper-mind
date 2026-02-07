@@ -37,43 +37,60 @@ export function SignalCheckModal({ isOpen, onClose, onStartSession, resistances 
                     <p className="text-gray-400 text-sm">Ensure all sensors have good contact with your skin.</p>
                 </div>
 
-                <div className="space-y-6 relative z-10">
-                    <div>
-                        <div className="text-center text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Temporal (Sides)</div>
-                        <div className="grid grid-cols-2 gap-4">
-                            {["T3", "T4"].map((ch) => {
-                                const status = getSignalStatus((resistances as any)[ch]);
-                                return (
-                                    <div key={ch} className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700 flex flex-col items-center gap-2 transition-all hover:bg-gray-800/80">
-                                        <div className={`w-3 h-3 rounded-full ${status.bg} shadow-[0_0_8px_rgba(0,0,0,0.5)]`} />
-                                        <div className={`text-xl font-mono font-bold ${status.color}`}>{ch}</div>
-                                        <div className="text-[10px] text-gray-500 uppercase font-semibold">{status.label}</div>
-                                        <div className="text-xs text-gray-400 font-mono">
-                                            {(resistances as any)[ch] === Infinity ? "---" : Math.round((resistances as any)[ch] / 1000) + "kΩ"}
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
+                <div className="relative flex justify-center py-4">
+                    {/* Head Map SVG */}
+                    <div className="relative w-64 h-64">
+                        <svg viewBox="0 0 200 240" className="w-full h-full drop-shadow-2xl">
+                            <defs>
+                                <filter id="glow">
+                                    <feGaussianBlur stdDeviation="2.5" result="coloredBlur" />
+                                    <feMerge>
+                                        <feMergeNode in="coloredBlur" />
+                                        <feMergeNode in="SourceGraphic" />
+                                    </feMerge>
+                                </filter>
+                            </defs>
 
-                    <div>
-                        <div className="text-center text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3">Occipital (Back)</div>
-                        <div className="grid grid-cols-2 gap-4">
-                            {["O1", "O2"].map((ch) => {
-                                const status = getSignalStatus((resistances as any)[ch]);
+                            {/* Head Outline (Top View) */}
+                            <path
+                                d="M100 20 C 150 20, 180 60, 180 110 C 180 180, 150 210, 100 210 C 50 210, 20 180, 20 110 C 20 60, 50 20, 100 20 Z"
+                                fill="none"
+                                stroke="#374151"
+                                strokeWidth="3"
+                            />
+                            {/* Nose */}
+                            <path d="M90 20 L 100 5 L 110 20" fill="none" stroke="#374151" strokeWidth="3" />
+                            {/* Ears */}
+                            <path d="M20 90 Q 5 110 20 130" fill="none" stroke="#374151" strokeWidth="3" />
+                            <path d="M180 90 Q 195 110 180 130" fill="none" stroke="#374151" strokeWidth="3" />
+
+                            {/* Connection Lines (Brainbit Flex Shape roughly) */}
+                            <path d="M35 100 C 35 100, 100 80, 165 100" fill="none" stroke="#4b5563" strokeWidth="1" strokeDasharray="4 4" opacity="0.5" />
+                            <path d="M35 100 C 35 160, 60 190, 100 190 C 140 190, 165 160, 165 100" fill="none" stroke="#4b5563" strokeWidth="1" strokeDasharray="4 4" opacity="0.5" />
+
+                            {/* Electrodes */}
+                            {[{ id: 'T3', x: 35, y: 100 }, { id: 'T4', x: 165, y: 100 }, { id: 'O1', x: 70, y: 180 }, { id: 'O2', x: 130, y: 180 }].map((node) => {
+                                const status = getSignalStatus((resistances as any)[node.id]);
                                 return (
-                                    <div key={ch} className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700 flex flex-col items-center gap-2 transition-all hover:bg-gray-800/80">
-                                        <div className={`w-3 h-3 rounded-full ${status.bg} shadow-[0_0_8px_rgba(0,0,0,0.5)]`} />
-                                        <div className={`text-xl font-mono font-bold ${status.color}`}>{ch}</div>
-                                        <div className="text-[10px] text-gray-500 uppercase font-semibold">{status.label}</div>
-                                        <div className="text-xs text-gray-400 font-mono">
-                                            {(resistances as any)[ch] === Infinity ? "---" : Math.round((resistances as any)[ch] / 1000) + "kΩ"}
-                                        </div>
-                                    </div>
+                                    <g key={node.id} transform={`translate(${node.x}, ${node.y})`}>
+                                        {/* Outer ring */}
+                                        <circle r="12" className={`${status.color} opacity-20`} fill="currentColor" />
+                                        <circle r="12" className={status.color} stroke="currentColor" strokeWidth="2" fill="none" />
+
+                                        {/* Inner glow dot */}
+                                        <circle r="5" className={status.color} fill="currentColor" filter="url(#glow)" />
+
+                                        {/* Label */}
+                                        <text y="28" x="0" textAnchor="middle" className="fill-white text-[12px] font-bold tracking-widest drop-shadow-md">{node.id}</text>
+
+                                        {/* Value */}
+                                        <text y="42" x="0" textAnchor="middle" fill="currentColor" className={`text-[10px] font-mono ${status.color} font-bold drop-shadow-md`}>
+                                            {(resistances as any)[node.id] === Infinity ? "---" : Math.round((resistances as any)[node.id] / 1000) + "k"}
+                                        </text>
+                                    </g>
                                 );
                             })}
-                        </div>
+                        </svg>
                     </div>
                 </div>
 
@@ -90,7 +107,7 @@ export function SignalCheckModal({ isOpen, onClose, onStartSession, resistances 
                         {allGood ? "Start Session" : "Adjust Headset to Continue"}
                     </button>
                     {!allGood && (
-                        <button onClick={onStartSession} className="w-full text-center text-xs text-gray-600 mt-4 hover:text-gray-400 underline">
+                        <button onClick={onStartSession} className="w-full text-center text-xs text-gray-400 mt-4 hover:text-white underline">
                             Skip Check (Not Recommended)
                         </button>
                     )}
