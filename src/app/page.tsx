@@ -1,77 +1,251 @@
 "use client";
 
 import { useState } from "react";
-// import { brainbitManager } from "@/lib/brainbit"; // Commented out until verified import
-// import { getGeminiModel } from "@/lib/gemini";   // Commented out until verified import
+import { brainbitManager } from "@/lib/brainbit";
+import { getGeminiModel } from "@/lib/gemini";
+import { SignalCheckModal } from "@/components/signal-check-modal";
+import { SignalGraph } from "@/components/signal-graph";
 
 export default function Home() {
   const [deviceStatus, setDeviceStatus] = useState("Disconnected");
   const [aiResponse, setAiResponse] = useState("");
+  const [isSignalModalOpen, setIsSignalModalOpen] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [sensor, setSensor] = useState<any>(null);
+  const [startAnalysis, setStartAnalysis] = useState(false);
+  const [focusScore, setFocusScore] = useState(0);
+  const [brainwaves, setBrainwaves] = useState({ alpha: 0, beta: 0, theta: 0, gamma: 0 });
+  const [resistances, setResistances] = useState({ O1: Infinity, O2: Infinity, T3: Infinity, T4: Infinity });
 
   const handleConnect = async () => {
     try {
-      setDeviceStatus("Scanning...");
-      // In a real scenario:
-      // const sensors = await brainbitManager.startScanning();
-      // if (sensors.length > 0) await brainbitManager.connect(sensors[0]);
-      setTimeout(() => setDeviceStatus("Connected (Simulated)"), 1000);
+      setDeviceStatus("Connecting...");
+      // BrainbitClient.connect() handles both the device picker and the connection
+      const connectedClient = await brainbitManager.connect();
+      setSensor(connectedClient);
+      setDeviceStatus("Connected");
+
+      // Open signal check modal on successful connection
+      setIsSignalModalOpen(true);
+
+      // Subscribe to signal updates for later
+      brainbitManager.subscribe((data) => {
+        setFocusScore(Math.round(data.focusScore));
+        setBrainwaves({
+          alpha: parseFloat(data.alpha.toFixed(2)),
+          beta: parseFloat(data.beta.toFixed(2)),
+          theta: parseFloat(data.theta.toFixed(2)),
+          gamma: parseFloat(data.gamma.toFixed(2))
+        });
+      });
+
+      // Start Resistance immediately (this is the ONLY GATT op now)
+
+      // Start and subscribe to resistance data
+      await brainbitManager.startResistance();
+      brainbitManager.subscribeToResistance((data) => {
+        // Brainbit README says: resistanceCh1, resistanceCh2, resistanceCh3, resistanceCh4
+        // Standard mapping: Ch1=T3, Ch2=T4, Ch3=O1, Ch4=O2
+        setResistances({
+          T3: data.resistanceCh1 ?? Infinity,
+          T4: data.resistanceCh2 ?? Infinity,
+          O1: data.resistanceCh3 ?? Infinity,
+          O2: data.resistanceCh4 ?? Infinity
+        });
+      });
+
     } catch (error) {
       console.error(error);
       setDeviceStatus("Connection Failed");
     }
   };
 
-  const handleAnalyze = async () => {
-    setAiResponse("Analyzing brainwaves...");
+  const handleStartSession = async () => {
+    setIsSignalModalOpen(false);
     try {
-      // In a real scenario:
-      // const model = getGeminiModel();
-      // const result = await model.generateContent("Analyze this signal...");
-      // setAiResponse(result.response.text());
-      setTimeout(() => setAiResponse("Deep Focus State Detected. Suggesting: 5 min break."), 1500);
-    } catch (error) {
-      console.error(error);
-      setAiResponse("Analysis Failed");
+      await brainbitManager.stopResistance();
+      // Small delay to ensure GATT is free
+      await new Promise(r => setTimeout(r, 1500));
+      await brainbitManager.startEEG();
+    } catch (e) {
+      console.error("Failed to start session:", e);
+    }
+  };
+
+
+
+  const handleSignalCheck = async () => {
+    try {
+      await brainbitManager.stopEEG();
+      await new Promise(r => setTimeout(r, 1500));
+      await brainbitManager.startResistance();
+      setIsSignalModalOpen(true);
+    } catch (e) {
+      console.error("Error switching to signal check:", e);
+    }
+  };
+
+  const getSignalColor = (r: number) => {
+    // < 200kOhm is generally considered good contact for Brainbit
+    if (r < 200000) return "bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]";
+    if (r < 1000000) return "bg-yellow-500";
+    return "bg-red-500";
+  };
+
+  const handleAnalyze = async () => {
+    if (!sensor && deviceStatus !== "Connected") {
+      // Optional: Error or mock mode
+    }
+
+    setStartAnalysis(true);
+    setAiResponse("Analyzing your brain activity...");
+
+    try {
+      const model = getGeminiModel();
+      // Construct a prompt with the user's CURRENT mental state metrics
+      const prompt = `
+        You are a neurofeedback expert. 
+        Analyze the following real-time brainwave data:
+        - Focus Score: ${focusScore}/100
+        - Alpha (Relaxation): ${brainwaves.alpha}
+        - Beta (Active Thought): ${brainwaves.beta}
+        - Theta (Drowsiness): ${brainwaves.theta}
+        - Gamma (Flow State): ${brainwaves.gamma}
+        
+        Provide a concise (2-3 sentence) insight into the user's current mental state. 
+        If Gamma is high, mention Flow State.
+        If Focus is low (<40), suggest a quick breathing exercise.
+        If Focus is high (>70), suggest how to maintain this flow state.
+      `;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      setAiResponse(response.text());
+    } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
+      console.error("Gemini Error:", error);
+      setAiResponse(`Analysis Failed: ${error.message}`);
+    } finally {
+      setStartAnalysis(false);
     }
   };
 
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <h1 className="text-4xl font-bold tracking-tight">Deeper Mind</h1>
+    <main className="min-h-screen bg-black text-white p-8 font-sans selection:bg-purple-900 selection:text-white">
+      <SignalCheckModal
+        isOpen={isSignalModalOpen}
+        onClose={() => setIsSignalModalOpen(false)}
+        onStartSession={handleStartSession}
+        resistances={resistances}
+      />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <div className="p-6 border rounded-lg min-w-[300px] flex flex-col gap-4">
-            <h2 className="text-xl font-semibold">Brainbit Device</h2>
-            <div className="flex justify-between items-center">
-              <span>Status:</span>
-              <span className={`font-mono ${deviceStatus.includes("Connected") ? "text-green-500" : "text-yellow-500"}`}>
-                {deviceStatus}
-              </span>
+      <div className="max-w-4xl mx-auto space-y-12">
+        {/* Header */}
+        <header className="flex justify-between items-center border-b border-gray-800 pb-6">
+          <div className="space-y-1">
+            <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+              Deeper Mind
+            </h1>
+            <p className="text-gray-400 text-sm tracking-wide">GEMINI 3 HACKATHON • BRAINBIT INTEGRATION</p>
+          </div>
+          <div className="flex items-center gap-6">
+            {/* Signal Indicators */}
+            {deviceStatus === "Connected" && (
+              <button
+                onClick={handleSignalCheck}
+                className="flex gap-3 bg-gray-900/80 p-2.5 rounded-xl border border-gray-800 backdrop-blur-sm hover:border-gray-600 transition-colors"
+                title="Check Signal Quality"
+              >
+                {["T3", "O1", "O2", "T4"].map((ch) => (
+                  <div key={ch} className="flex flex-col items-center gap-1.5">
+                    <div className={`w-2.5 h-2.5 rounded-full transition-all duration-500 ${getSignalColor((resistances as any)[ch])}`} />
+                    <span className="text-[9px] text-gray-500 font-mono font-bold">{ch}</span>
+                  </div>
+                ))}
+              </button>
+            )}
+
+            <div className={`text-xs px-3 py-1.5 rounded-full font-mono uppercase tracking-wider ${deviceStatus === "Connected" ? "bg-green-950/50 text-green-400 border border-green-800" :
+              deviceStatus === "Connecting..." ? "bg-yellow-950/50 text-yellow-400 border border-yellow-800" :
+                "bg-red-950/50 text-red-400 border border-red-800"
+              }`}>
+              {deviceStatus}
             </div>
-            <button
-              onClick={handleConnect}
-              className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            >
-              Connect Device
-            </button>
+            {deviceStatus !== "Connected" && (
+              <button
+                onClick={handleConnect}
+                className="bg-white text-black px-5 py-2 rounded-full text-sm font-semibold hover:bg-gray-200 transition-all hover:scale-105 active:scale-95"
+              >
+                Connect Device
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Focus Meter */}
+        <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+          <div className="flex justify-between items-end">
+            <h2 className="text-2xl font-light text-gray-200">Live Focus Score</h2>
+            <span className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-b from-white to-gray-500">{focusScore}</span>
           </div>
 
-          <div className="p-6 border rounded-lg min-w-[300px] flex flex-col gap-4">
-            <h2 className="text-xl font-semibold">Gemini 3 Insights</h2>
-            <div className="min-h-[100px] p-4 bg-black/5 rounded text-sm">
-              {aiResponse || "Waiting for signal data..."}
+          <div className="relative h-6 bg-gray-900 rounded-full overflow-hidden border border-gray-800">
+            <div
+              className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 transition-all duration-500 ease-out"
+              style={{ width: `${focusScore}%` }}
+            />
+          </div>
+
+          <div className="grid grid-cols-4 gap-4">
+            <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 hover:border-blue-500/50 transition-colors">
+              <div className="text-xs text-blue-400 uppercase tracking-widest font-semibold mb-2">Alpha (Relax)</div>
+              <div className="text-2xl font-mono text-gray-200">{brainwaves.alpha}</div>
             </div>
+            <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 hover:border-purple-500/50 transition-colors">
+              <div className="text-xs text-purple-400 uppercase tracking-widest font-semibold mb-2">Beta (Focus)</div>
+              <div className="text-2xl font-mono text-gray-200">{brainwaves.beta}</div>
+            </div>
+            <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 hover:border-pink-500/50 transition-colors">
+              <div className="text-xs text-pink-400 uppercase tracking-widest font-semibold mb-2">Theta (Drowsy)</div>
+              <div className="text-2xl font-mono text-gray-200">{brainwaves.theta}</div>
+            </div>
+            <div className="bg-gray-900/50 p-6 rounded-2xl border border-gray-800 hover:border-orange-500/50 transition-colors">
+              <div className="text-xs text-orange-400 uppercase tracking-widest font-semibold mb-2">Gamma (Flow)</div>
+              <div className="text-2xl font-mono text-gray-200">{brainwaves.gamma}</div>
+            </div>
+          </div>
+        </section>
+
+        <section className="animate-in fade-in slide-in-from-bottom-5 duration-1000">
+          <SignalGraph />
+        </section>
+
+        {/* AI Analysis */}
+        <section className="space-y-6 pt-12 border-t border-gray-800">
+          <div className="flex justify-between items-center">
+            <h2 className="text-2xl font-light text-gray-200">Gemini Insight</h2>
             <button
               onClick={handleAnalyze}
-              disabled={!deviceStatus.includes("Connected")}
-              className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 disabled:opacity-50"
+              disabled={startAnalysis}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-8 py-3 rounded-xl text-sm font-semibold hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-purple-500/25"
             >
-              Analyze Pattern
+              {startAnalysis ? "Analyzing..." : "Analyze Pattern"}
             </button>
           </div>
-        </div>
-      </main>
-    </div>
+
+          <div className="min-h-[160px] bg-gradient-to-br from-gray-900 to-black rounded-2xl p-8 border border-gray-800 relative overflow-hidden group">
+            <div className="absolute inset-0 bg-grid-white/[0.02] bg-[size:16px_16px]" />
+            {aiResponse ? (
+              <p className="text-gray-300 text-lg leading-relaxed relative z-10 animate-in fade-in zoom-in-95 duration-500">
+                {aiResponse}
+              </p>
+            ) : (
+              <div className="flex h-full items-center justify-center text-gray-600 text-sm relative z-10">
+                Waiting for analysis...
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+    </main>
   );
 }
